@@ -14,6 +14,73 @@ import (
 // написать тесты
 // подготовить тестовы сет
 
+type Dictionary struct {
+	weightList map[int][]string
+	keys       []int
+}
+
+func CreateDict(weightList map[int][]string, keys []int) *Dictionary {
+	return &Dictionary{
+		weightList: weightList,
+		keys:       keys,
+	}
+}
+
+func (d *Dictionary) First() (string, int, error) {
+	if len(d.keys) > 0 {
+		list := d.weightList[d.keys[0]]
+		if len(list) < 1 {
+			fmt.Print(list, d.keys[0], d)
+		}
+		return list[0], d.keys[0], nil
+	}
+	return "", 0, fmt.Errorf("empty")
+}
+
+func (d *Dictionary) Next(word string, key int) (string, int, error) {
+	list := d.weightList[key]
+	for i, val := range list {
+		if val == word {
+			if i < len(list)-1 {
+				return list[i+1], key, nil
+			}
+			for ik, kk := range d.keys {
+				if kk == key {
+					if ik == len(d.keys)-1 {
+						return "", 0, fmt.Errorf("the end")
+					}
+					list = d.weightList[d.keys[ik+1]]
+					return list[0], d.keys[ik+1], nil
+				}
+			}
+		}
+	}
+	return "", 0, fmt.Errorf("the end")
+}
+
+func (d *Dictionary) Del(word string, key int) {
+	list := d.weightList[key]
+	for i, val := range list {
+		if val == word {
+			if len(list) == 1 {
+				delete(d.weightList, key)
+				for ki, kk := range d.keys {
+					if kk == key {
+						keys := d.keys
+						d.keys = keys[:ki]
+						d.keys = append(d.keys, keys[ki+1:]...)
+						break
+					}
+				}
+			} else {
+				list[i] = list[len(list)-1]
+				d.weightList[key] = list[:len(list)-1]
+			}
+			break
+		}
+	}
+}
+
 func generatePassword(dictionary []string) string {
 	weightList := make(map[int][]string)
 	// построить мапу с весом для слов(вес -> связный список)
@@ -38,43 +105,58 @@ func generatePassword(dictionary []string) string {
 		keys = append(keys, k)
 	}
 	sort.Ints(keys)
-	// TODO: дописать поиск лучшего соседа,походу рекрурсия нужна
-	var password []string
-	lesspath := 1000
-	bestNeibh := ""
-	for index, val := range keys {
-		set := weightList[val]
-		if len(set) > 1 {
-			for _, samesetVal := range set {
-				path := countPath(set[0] + samesetVal)
-				if path < lesspath {
-					lesspath = path
-					bestNeibh = samesetVal
-				}
-			}
-		}
-		for _, neibSetKey := range keys[index:] {
-			if neibSetKey+val > lesspath {
-				password = append(password, bestNeibh)
-				if len(password) > 3 {
-					return fmt.Sprint(password)
-				}
-				lesspath = 1000
-				bestNeibh = ""
-				break
-			}
-			fmt.Println(index, neibSetKey)
-			neibSet := weightList[neibSetKey]
-			for _, v := range neibSet {
-				path := countPath(set[0] + v)
-				if path < lesspath {
-					lesspath = path
-					bestNeibh = v
-				}
-			}
+	dict := CreateDict(weightList, keys)
+	k := keys[0]
+	sourceWord := weightList[k][0]
+	researchWord, researchKey, _ := dict.Next(sourceWord, keys[0])
+	dict.Del(sourceWord, k)
+	var pass []string
+	pass = append(pass, sourceWord)
+	for len(pass) < 4 {
+		word, key, path := dict.findNeighbor(10000, researchKey, 0, k+12, "", sourceWord, researchWord)
+		println(word, key, path)
+		pass = append(pass, word)
+		dict.Del(word, key)
+		researchWord, researchKey, _ = dict.First()
+		sourceWord = word
+	}
+	return strings.Join(pass, " ")
+}
+
+// ищем лучшую пару
+// удалеем из словаря пару
+// ищем соседа
+// ищем соседа
+
+// смотрим на минимум
+// смотримм на последнюю букву
+// определям самый дальний угол клавы
+// определяем глубину поиска по группам
+// запускаем поиск лучшего соседа на глубину
+
+func (d *Dictionary) findNeighbor(minPath, researchKey, keyGroup, deep int, bestNeighbor, sourceWord, researchWord string) (string, int, int) {
+
+	// поиск лучшего соседа
+	// запоминаем минимальный результат  и слово и группу
+	// берем следующее слово - проверяем лучше минимума или нет
+	// если да  записываем результат и берем следующее слово
+	if deep < researchKey {
+		return bestNeighbor, keyGroup, minPath
+	}
+	if researchWord != sourceWord {
+		counter := countPath(sourceWord + researchWord)
+		if counter < minPath {
+			minPath = counter
+			keyGroup = researchKey
+			bestNeighbor = researchWord
 		}
 	}
-	return fmt.Sprint(password)
+	researchWord, researchKey, err := d.Next(researchWord, researchKey)
+	if err != nil {
+		return bestNeighbor, keyGroup, minPath
+	}
+	// next for neighbor group key
+	return d.findNeighbor(minPath, researchKey, keyGroup, deep, bestNeighbor, sourceWord, researchWord)
 }
 
 func countPath(word string) int {
